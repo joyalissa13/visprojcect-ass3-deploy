@@ -1,0 +1,108 @@
+import { useState, useRef, useEffect } from 'react';
+import type { RentOverlayMode } from '../types/data';
+
+interface SharedControlsProps {
+  minYear: number;
+  maxYear: number;
+  note: string;
+  value: number;
+  onChange: (year: number) => void;
+  rentOverlayMode?: RentOverlayMode;
+  onRentOverlayChange?: (mode: RentOverlayMode) => void;
+  selectedDistrict?: string | null;
+}
+
+const SharedControls = ({
+  minYear,
+  maxYear,
+  note,
+  value,
+  onChange,
+  rentOverlayMode,
+  onRentOverlayChange,
+  selectedDistrict,
+}: SharedControlsProps) => {
+  // Local value for immediate visual feedback while dragging
+  const [localValue, setLocalValue] = useState(value);
+  const isDraggingRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+
+  // Sync when value is changed externally (e.g., programmatic reset)
+  useEffect(() => {
+    if (!isDraggingRef.current) setLocalValue(value);
+  }, [value]);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const next = Number.parseInt(event.target.value, 10);
+    setLocalValue(next); // instant visual update
+
+    // Throttle global state commit to one update per animation frame
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      onChange(next);
+      rafRef.current = null;
+    });
+  };
+
+  const handlePointerDown = () => { isDraggingRef.current = true; };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLInputElement>) => {
+    isDraggingRef.current = false;
+    // Cancel any pending RAF and do a final synchronous commit
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    onChange(Number.parseInt(event.currentTarget.value, 10));
+  };
+
+  const hasRentToggle = Boolean(rentOverlayMode && onRentOverlayChange);
+
+  return (
+    <div className="card shared-controls">
+      <div className="controls-grid">
+        <div className="slider-group">
+          <div className="slider-header">
+            <label htmlFor="year-slider">Selected year: {localValue}</label>
+            <span>{minYear} – {maxYear}</span>
+          </div>
+          <input
+            id="year-slider"
+            type="range"
+            min={minYear}
+            max={maxYear}
+            value={localValue}
+            onChange={handleChange}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+          />
+          <p className="control-note">{note}</p>
+        </div>
+
+        {hasRentToggle && (
+          <div className="toggle-group">
+            <div className="segmented-control">
+              <button
+                type="button"
+                className={rentOverlayMode === 'average' ? 'segment active' : 'segment'}
+                onClick={() => onRentOverlayChange?.('average')}
+              >
+                Vienna average
+              </button>
+              <button
+                type="button"
+                className={rentOverlayMode === 'selectedDistrict' ? 'segment active' : 'segment'}
+                onClick={() => onRentOverlayChange?.('selectedDistrict')}
+              >
+                {selectedDistrict ?? 'Selected district'}
+              </button>
+            </div>
+            <p className="control-note">Rent overlay source for the income chart.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SharedControls;
